@@ -41,9 +41,12 @@ def main():
         results.extend(sorted(cat_anns, key=lambda x: x["score"], reverse=True)[:topk])
     if missing_dets_cats:
         logger.warning(
+            f"\n===\n"
             f"{len(missing_dets_cats)} classes had less than {topk} detections!\n"
-            f"Please use the lvdevil/infer_topk.py script to output a results file "
-            f"with {topk} detections for each class."
+            f"Outputting {topk} detections for each class will improve AP further.\n"
+            f"If using detectron2, please use the lvdevil/infer_topk.py script to "
+            f"output a results file with {topk} detections for each class.\n"
+            f"==="
         )
 
     gt = LVIS(args.annotations_json)
