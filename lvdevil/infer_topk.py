@@ -35,8 +35,6 @@ from detectron2.utils.comm import get_world_size
 from detectron2.utils.logger import create_small_table, log_every_n_seconds
 from iopath.common.file_io import PathManager
 
-# from src.utils.detectron2.train_net import config_compat_fix, register_custom_datasets
-
 
 logger = logging.getLogger("detectron2.infer_topk")
 
@@ -46,14 +44,6 @@ def get_infer_topk_cfg():
     cfg.TEST.TOPK_CAT = CfgNode()
     cfg.TEST.TOPK_CAT.ENABLED = True
     cfg.TEST.TOPK_CAT.K = 10000
-    # If K_TYPE is proportional-{train,test}, this controls the maximum value that K can
-    # be for any category.
-    cfg.TEST.TOPK_CAT.K_MAX = -1
-    # K_TYPE indicates what the K parameter controls
-    # - absolute: Output exactly K predictions per category
-    # - proportional-train: Output K predictions per GT instance in training set.
-    # - proportional-test: Output K predictions per GT instance in test set.
-    cfg.TEST.TOPK_CAT.K_TYPE = "absolute"
     # Images used to estimate initial score threshold, with mask branch off.
     cfg.TEST.TOPK_CAT.NUM_ESTIMATE = 1000
     return cfg
@@ -544,8 +534,6 @@ def _per_class_thresholded_inference_cascade(model, score_thresholds, topk_per_c
                 score_thresh=0,
                 nms_thresh=predictor.test_nms_thresh,
                 topk_per_image=-1,
-                min_per_cat=predictor.test_min_per_cat,
-                max_per_cat=topk_per_cat,
             )
             return pred_instances
             # </modified>
@@ -850,26 +838,7 @@ def inference_on_dataset(
 def main(args):
     cfg = setup(args)
     assert cfg.TEST.TOPK_CAT.ENABLED
-    if cfg.TEST.TOPK_CAT.K_TYPE == "absolute":
-        topk = cfg.TEST.TOPK_CAT.K
-    elif cfg.TEST.TOPK_CAT.K_TYPE == "proportional-train":
-        logger.warning(
-            "K_TYPE=proportional-train is not thoroughly tested; it occasionally "
-            "outputs fewer instances than expected per category."
-        )
-        assert len(cfg.DATASETS.TRAIN) == 1
-        metadata = MetadataCatalog.get(cfg.DATASETS.TRAIN[0]).as_dict()
-        topk = (metadata["instance_counts"].int() * cfg.TEST.TOPK_CAT.K).tolist()
-        if cfg.TEST.TOPK_CAT.K_MAX > 0:
-            topk = [min(x, cfg.TEST.TOPK_CAT.K_MAX) for x in topk]
-    elif cfg.TEST.TOPK_CAT.K_TYPE == "proportional-test":
-        logger.warning(
-            "K_TYPE=proportional-test is not thoroughly tested; it occasionally "
-            "outputs fewer instances than expected per category."
-        )
-        topk = None  # Decide per dataset
-    else:
-        raise ValueError(f"Unknown topk type: {cfg.TEST.TOPK_CAT.K_TYPE}.")
+    topk = cfg.TEST.TOPK_CAT.K
 
     model = build_model(cfg)
     logger.info("Model:\n{}".format(model))
@@ -878,11 +847,6 @@ def main(args):
     )
     results = OrderedDict()
     for dataset_name in cfg.DATASETS.TEST:
-        if cfg.TEST.TOPK_CAT.K_TYPE == "proportional-test":
-            metadata = MetadataCatalog.get(dataset_name).as_dict()
-            topk = (metadata["instance_counts"].int() * cfg.TEST.TOPK_CAT.K).tolist()
-            if cfg.TEST.TOPK_CAT.K_MAX > 0:
-                topk = [min(x, cfg.TEST.TOPK_CAT.K_MAX) for x in topk]
         data_loader = build_detection_test_loader(cfg, dataset_name)
         evaluator = get_evaluator(
             cfg, dataset_name, os.path.join(cfg.OUTPUT_DIR, "inference", dataset_name)
