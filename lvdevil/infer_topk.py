@@ -770,8 +770,6 @@ def inference_on_dataset(
             if idx == num_warmup:
                 start_time = time.perf_counter()
                 total_compute_time = 0
-            if idx >= num_estimate:  # HACK
-                break
 
             start_compute_time = time.perf_counter()
             thresholds = get_thresholds(scores, init_thresholds)
