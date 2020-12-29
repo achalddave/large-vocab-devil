@@ -31,9 +31,10 @@ from detectron2.evaluation.lvis_evaluation import LVISEvaluator
 from detectron2.modeling import build_model
 from detectron2.modeling.roi_heads.fast_rcnn import fast_rcnn_inference
 from detectron2.modeling.roi_heads.cascade_rcnn import CascadeROIHeads
+from detectron2.structures import Instances
 from detectron2.utils.comm import get_world_size
 from detectron2.utils.logger import create_small_table, log_every_n_seconds
-from iopath.common.file_io import PathManager
+from fvcore.common.file_io import PathManager
 
 
 logger = logging.getLogger("detectron2.infer_topk")
@@ -66,11 +67,11 @@ def get_evaluator(cfg, dataset_name, output_folder=None):
     evaluator_type = MetadataCatalog.get(dataset_name).evaluator_type
     if evaluator_type == "lvis":
         return LVISEvaluatorMaxDets(
-            dataset_name, cfg, True, output_folder, max_dets=[300, -1]
+            dataset_name, cfg, True, output_folder, max_dets=[-1]
         )
     elif evaluator_type == "coco":
         return COCOEvaluatorMaxDets(
-            dataset_name, cfg, True, output_folder, max_dets=[100, 300, -1]
+            dataset_name, cfg, True, output_folder, max_dets=[-1]
         )
     else:
         raise NotImplementedError
@@ -555,6 +556,39 @@ def per_class_thresholded_inference(model, score_thresholds, topk_per_cat):
         yield
 
 
+@contextmanager
+def limit_mask_branch_proposals(model, max_proposals):
+    """Modify an RCNN model to limit proposals processed by mask head at a time."""
+
+    def _forward_with_given_boxes_limited(self, features, instances):
+        assert not self.training
+        assert instances[0].has("pred_boxes") and instances[0].has("pred_classes")
+
+        max_instances = max(len(x) for x in instances)
+        if max_instances > max_proposals and (self.mask_on or self.keypoint_on):
+            outputs = []
+            num_ims = len(instances)
+            from tqdm import tqdm
+
+            for i in range(0, max_instances, max_proposals):
+                chunk = [x[i : i + max_proposals] for x in instances]
+                chunk = self._forward_mask(features, chunk)
+                chunk = self._forward_keypoint(features, chunk)
+                outputs.append(chunk)
+            instances = [Instances.cat([x[j] for x in outputs]) for j in range(num_ims)]
+        else:
+            instances = self._forward_mask(features, instances)
+            instances = self._forward_keypoint(features, instances)
+        return instances
+
+    roi_heads = model.roi_heads
+    _old_fn = roi_heads.forward_with_given_boxes
+    _new_fn = _forward_with_given_boxes_limited.__get__(roi_heads)  # Get bound method.
+    roi_heads.forward_with_given_boxes = _new_fn
+    yield
+    roi_heads.forward_with_given_boxes = _old_fn
+
+
 def inference_on_dataset(
     model, data_loader, evaluator, num_classes, topk, num_estimate
 ):
@@ -742,7 +776,8 @@ def inference_on_dataset(
             start_compute_time = time.perf_counter()
             thresholds = get_thresholds(scores, init_thresholds)
             with per_class_thresholded_inference(model, thresholds, topk):
-                outputs = model(inputs)
+                with limit_mask_branch_proposals(model, max_proposals=300):
+                    outputs = model(inputs)
             update_scores(scores, inputs, outputs)
 
             if torch.cuda.is_available():
