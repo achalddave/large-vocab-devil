@@ -11,4 +11,4 @@ NAME: Calibrate with Histogram Binning
 TRAIN:
   TRAIN_SET: custom
 VISUALIZE: true
-_BASE_: ../../../calibration/lvis_histogram.yaml
+_BASE_: ./base.yaml

@@ -1,0 +1,15 @@
+TEST:
+  N_BINS: 20
+  IOU: 0.75
+  IOU_TYPE: segm
+
+CROSS_VAL:
+  ENABLED: False
+
+DATASET: lvis
+SEED: 0
+
+METHOD:
+  GROUPING: overall
+  HIST:
+    N_BINS: -1  # Match TEST.N_BINS
