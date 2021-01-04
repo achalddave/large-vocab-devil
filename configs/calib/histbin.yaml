@@ -1,0 +1,14 @@
+METHOD:
+  GROUPING: per-class
+  MAINTAIN_RANK: true
+  NAME: HistogramBinning
+  PER_CLASS:
+    MISSING_SCORE: zero
+    NO_TP_SCORE: zero
+TEST:
+  MAX_DETS_EVAL: -1
+NAME: Calibrate with Histogram Binning
+TRAIN:
+  TRAIN_SET: custom
+VISUALIZE: true
+_BASE_: ../../../calibration/lvis_histogram.yaml

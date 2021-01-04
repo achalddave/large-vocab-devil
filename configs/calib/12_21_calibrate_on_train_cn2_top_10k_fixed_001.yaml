@@ -1,0 +1,14 @@
+METHOD:
+  GROUPING: per-class
+  MAINTAIN_RANK: true
+  NAME: IsotonicRegression
+  PER_CLASS:
+    MISSING_SCORE: zero
+    NO_TP_SCORE: zero
+NAME: Calibrate with Isotonic regression
+TEST:
+  MAX_DETS_EVAL: -1
+TRAIN:
+  TRAIN_SET: custom
+VISUALIZE: true
+_BASE_: ../../../calibration/lvis_histogram.yaml
