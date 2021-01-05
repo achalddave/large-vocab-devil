@@ -21,6 +21,7 @@ class EvalWrapper:
         dataset_type="lvis",
         iou_type="segm",
         max_dets=300,
+        max_dets_per_class=-1,
         ious=None,
     ):
         if ious is None:
@@ -30,6 +31,7 @@ class EvalWrapper:
         self.dataset_type = dataset_type
         self.iou_type = iou_type
         self.max_dets = max_dets
+        self.max_dets_per_class = max_dets_per_class
         self.ious = ious
         self.groundtruth_original = groundtruth
         self.results_original = results
@@ -109,6 +111,11 @@ class EvalWrapper:
             json.dump(groundtruth, fp)
             fp.seek(0)
             groundtruth = fp.name
+        if self.max_dets_per_class >= 0:
+            if isinstance(results, (str, Path)):
+                with open(results, "r") as f:
+                    results = json.load(results)
+            results = limit_dets_per_class(results, self.max_dets_per_class)
         if self.is_lvis():
             if not isinstance(groundtruth, LVIS):
                 groundtruth = LVIS(str(groundtruth))

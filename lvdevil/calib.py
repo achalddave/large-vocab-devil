@@ -52,6 +52,7 @@ def evaluate(
     vis_dir=None,
     vis_per_class=False,
     max_dets=300,
+    max_dets_per_class=-1,
 ):
     """
     Args:
@@ -75,7 +76,8 @@ def evaluate(
             directory.
         vis_per_class (bool): If vis_dir is specified and vis_per_class is True, output
             a reliability diagram for each class.
-        
+        max_dets (int): Limit number of detections per image.
+        max_dets_per_class (int): Limit number of detections per class.
     """
     if vis_dir is not None:
         vis_dir = Path(vis_dir)
@@ -91,6 +93,7 @@ def evaluate(
         ious=[iou],
         iou_type=iou_type,
         max_dets=max_dets,
+        max_dets_per_class=max_dets_per_class,
     )
     eval_obj = eval_wrapper.construct_eval(use_cats=True)
     is_lvis = eval_wrapper.is_lvis()
