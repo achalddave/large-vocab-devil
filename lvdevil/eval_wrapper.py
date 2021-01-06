@@ -114,7 +114,7 @@ class EvalWrapper:
         if self.max_dets_per_class >= 0:
             if isinstance(results, (str, Path)):
                 with open(results, "r") as f:
-                    results = json.load(results)
+                    results = json.load(f)
             results = limit_dets_per_class(results, self.max_dets_per_class)
         if self.is_lvis():
             if not isinstance(groundtruth, LVIS):

@@ -38,7 +38,8 @@ def get_cfg():
     cfg.TEST.N_BINS = 15
     cfg.TEST.IOU = 0.75
     cfg.TEST.IOU_TYPE = "segm"
-    cfg.TEST.MAX_DETS_EVAL = 300
+    cfg.TEST.MAX_DETS_EVAL = -1
+    cfg.TEST.MAX_DETS_PER_CLASS_EVAL = -1
 
     # If enabled, report results on k-fold cross validation splits.
     cfg.CROSS_VAL = CN({"ENABLED": False})
@@ -285,6 +286,7 @@ class CalibrationTrainer:
             ious=[cfg.TEST.IOU],
             iou_type=cfg.TEST.IOU_TYPE,
             max_dets=cfg.TEST.MAX_DETS_EVAL,
+            max_dets_per_class=cfg.TEST.MAX_DETS_PER_CLASS_EVAL,
         )
         train_eval_obj = train_eval_wrapper.construct_eval(use_cats=True)
         train_eval_obj.evaluate()
@@ -310,6 +312,7 @@ class CalibrationTrainer:
             dataset=cfg.DATASET,
             n_bins=cfg.TEST.N_BINS,
             max_dets=cfg.TEST.MAX_DETS_EVAL,
+            max_dets_per_class=cfg.TEST.MAX_DETS_PER_CLASS_EVAL,
             **kwargs,
         )
         # Compute AP with default iou range.
@@ -319,6 +322,7 @@ class CalibrationTrainer:
             dataset_type=cfg.DATASET,
             iou_type=cfg.TEST.IOU_TYPE,
             max_dets=cfg.TEST.MAX_DETS_EVAL,
+            max_dets_per_class=cfg.TEST.MAX_DETS_PER_CLASS_EVAL,
         )
         eval_obj = eval_wrapper_iou5095.construct_eval(use_cats=True)
         eval_obj.run()
@@ -466,8 +470,8 @@ class CalibrationTrainer:
             json.dump(metrics, f)
         logger.info(f"Copypaste:\n{','.join(keys)}")
         logger.info(f"Copypaste:\n{csv_msg}")
-        logger.info(f"AP: ", metrics["AP-IoU50:95"])
-        logger.info(f"AP-pooled: ", metrics["AP-pooled-IoU50:95"])
+        logger.info(f"AP: %s", metrics["AP-IoU50:95"])
+        logger.info(f"AP-pooled: %s", metrics["AP-pooled-IoU50:95"])
         if cfg.SAVE_RESULTS:
             if len(all_results) == 1:
                 with open(output_dir / "calibrated.json", "w") as f:
