@@ -8,3 +8,4 @@ tqdm>=4.54.1
 iopath==0.1.2
 torchvision
 torch
+lvis>=0.5.3
