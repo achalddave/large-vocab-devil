@@ -1,5 +1,6 @@
 import copy
 import datetime
+import heapq
 import itertools
 import json
 import logging
@@ -45,6 +46,7 @@ def get_infer_topk_cfg():
     cfg.TEST.TOPK_CAT = CfgNode()
     cfg.TEST.TOPK_CAT.ENABLED = True
     cfg.TEST.TOPK_CAT.K = 10000
+    cfg.TEST.TOPK_CAT.MIN_SCORE = 1.0e-7
     # Images used to estimate initial score threshold, with mask branch off.
     cfg.TEST.TOPK_CAT.NUM_ESTIMATE = 1000
     return cfg
@@ -590,7 +592,7 @@ def limit_mask_branch_proposals(model, max_proposals):
 
 
 def inference_on_dataset(
-    model, data_loader, evaluator, num_classes, topk, num_estimate
+    model, data_loader, evaluator, num_classes, topk, num_estimate, min_score
 ):
     """
     Run model on the data_loader and evaluate the metrics with evaluator.
@@ -637,12 +639,12 @@ def inference_on_dataset(
     # Every few iterations, all processes pass their process_scores to each other and
     # updates their own global scores.
 
-    # Map category id to sorted list of top scores from this process.
+    # Map category id to min-heap of top scores from this process.
     process_scores = defaultdict(list)
-    # Map category id to sorted list of top scores from all processes.
+    # Map category id to min-heap of top scores from all processes.
     global_scores = defaultdict(list)
     init_thresholds = torch.full(
-        (num_classes + 1,), fill_value=-1, dtype=torch.float32
+        (num_classes + 1,), fill_value=min_score, dtype=torch.float32
     ).to(model.device)
     init_threshold_path = Path(evaluator._output_dir) / "_thresholds_checkpoint.pth"
     if init_threshold_path.exists():
@@ -669,37 +671,47 @@ def inference_on_dataset(
             elif len(scores[i]) < topk_loose[i]:
                 thresholds.append(-1)
             else:
-                thresholds.append(scores[i][topk_loose[i] - 1][1])
+                thresholds.append(scores[i][0])
         # Add -1 for background
         thresholds = torch.FloatTensor(thresholds + [-1]).to(model.device)
         # Clamp at minimum thresholds
         return torch.max(thresholds, init_thresholds)
 
     def update_scores(scores, inputs, outputs):
-        to_sort = set()
+        updated = set()
         for image, output in zip(inputs, outputs):
-            instances = output["instances"]
-            for label, score in zip(instances.pred_classes, instances.scores):
-                label = label.int().item()
-                scores[label].append((image["image_id"], score.cpu().item()))
-                to_sort.add(label)
-        for label in to_sort:
-            scores[label] = sorted(scores[label], reverse=True, key=lambda x: x[1])[
-                : topk_loose[label]
-            ]
+            if isinstance(output, dict):
+                instances = output["instances"]
+            else:
+                instances = output
+            curr_labels = instances.pred_classes.int().tolist()
+            curr_scores = instances.scores.cpu().tolist()
+            for label, score in zip(curr_labels, curr_scores):
+                # label = label.int().item()
+                # scores[label].append((image["image_id"], score.cpu().item()))
+                if len(scores[label]) >= topk_loose[label]:
+                    if score < scores[label][0]:
+                        continue
+                    else:
+                        heapq.heappushpop(scores[label], score)
+                else:
+                    heapq.heappush(scores[label], score)
+                updated.add(label)
 
     def gather_scores(process_scores):
         # List of scores per process
         scores_list = comm.all_gather(process_scores)
         gathered = defaultdict(list)
-        for gathered_scores in scores_list:
-            for label, label_scores in gathered_scores.items():
-                gathered[label].extend(label_scores)
-
-        for label, label_scores in gathered.items():
-            gathered[label] = sorted(label_scores, reverse=True, key=lambda x: x[1])[
-                : topk_loose[label]
-            ]
+        labels = {x for scores in scores_list for x in scores.keys()}
+        for label in labels:
+            # Sort in descending order.
+            sorted_generator = heapq.merge(
+                *[sorted(x[label], reverse=True) for x in scores_list], reverse=True
+            )
+            top_k = itertools.islice(sorted_generator, topk_loose[label])
+            top_k_ascending = list(reversed(list(top_k)))  # Return to ascending order
+            heapq.heapify(top_k_ascending)
+            gathered[label] = top_k_ascending
         return gathered
 
     with inference_context(model), torch.no_grad():
@@ -725,12 +737,7 @@ def inference_on_dataset(
             # gather relatively fast, so we gather more often.
             # Later, the thresholds are high enough that inference is fast and gathering
             # is slow, so we stop gathering.
-            if (
-                idx < 10
-                or (idx < 100 and idx % 5 == 0)
-                or (idx < 1000 and idx % 10 == 0)
-                or (idx % 100 == 0)
-            ):
+            if (idx < 100 and idx % 10 == 0) or (idx % 500 == 0):
                 global_scores = gather_scores(process_scores)
 
             thresholds = get_thresholds(global_scores, init_thresholds)
@@ -739,11 +746,11 @@ def inference_on_dataset(
 
             with per_class_thresholded_inference(model, thresholds, topk):
                 with _turn_off_roi_heads(model, ["mask_on", "keypoint_on"]):
-                    outputs = model(inputs)
+                    outputs = model.inference(inputs, do_postprocess=False)
             update_scores(global_scores, inputs, outputs)
             update_scores(process_scores, inputs, outputs)
 
-            if (idx % 10) == 0:
+            if (idx < 100 and idx % 10 == 0) or (idx % 100 == 0):
                 logger.info(
                     "Threshold range (%s, %s); # collected: (%s, %s)",
                     thresholds[:-1].min(),
@@ -798,6 +805,7 @@ def inference_on_dataset(
                         idx + 1, total, seconds_per_img, str(eta)
                     ),
                     n=5,
+                    name=logger.name,
                 )
 
             # Clear unnecessary predictions every so often.
@@ -891,6 +899,7 @@ def main(args):
             num_classes=cfg.MODEL.ROI_HEADS.NUM_CLASSES,
             topk=topk,
             num_estimate=cfg.TEST.TOPK_CAT.NUM_ESTIMATE,
+            min_score=cfg.TEST.TOPK_CAT.MIN_SCORE,
         )
         results[dataset_name] = results_i
         if comm.is_main_process():
