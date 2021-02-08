@@ -48,7 +48,9 @@ def get_infer_topk_cfg():
     cfg.TEST.TOPK_CAT.K = 10000
     cfg.TEST.TOPK_CAT.MIN_SCORE = 1.0e-7
     # Images used to estimate initial score threshold, with mask branch off.
-    cfg.TEST.TOPK_CAT.NUM_ESTIMATE = 1000
+    # Set to be greater than LVIS validation set, so we do a full pass with the
+    # mask branch off.
+    cfg.TEST.TOPK_CAT.NUM_ESTIMATE = 30000
     return cfg
 
 
