@@ -4,7 +4,7 @@ numpy>=1.19.4
 Pillow>=8.0.1
 scikit-learn>=0.24.0
 scipy>=1.5.4
-torch>=1.7.1
 tqdm>=4.54.1
 iopath==0.1.2
-torchvision==0.8.2
+torchvision
+torch
