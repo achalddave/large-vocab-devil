@@ -37,11 +37,14 @@ We provide a modified detectron2 inference script which ensures that models outp
 ```
 python lvdevil/infer_topk.py \
 --config-file /path/to/detectron2/config.yaml \
-MODEL.WEIGHTS /path/to/detectron2/model_final.pth
+MODEL.WEIGHTS /path/to/detectron2/model_final.pth \
 OUTPUT_DIR /path/to/output_dir/
 ```
 
-This script has been tested with Mask R-CNN and Cascade R-CNN models.
+This script has been tested with Mask R-CNN and Cascade R-CNN models and
+detectron2 v0.3.
+To run this, you'll need to have
+[detectron2](https://github.com/facebookresearch/detectron2) set up.
 
 ## AP-Pool Evaluation
 
