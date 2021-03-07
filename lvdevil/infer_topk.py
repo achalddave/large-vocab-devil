@@ -436,12 +436,11 @@ def _turn_off_roi_heads(model, attrs):
 
 
 @contextmanager
-def _per_class_thresholded_inference_standard(model, score_thresholds, topk_per_cat):
+def _per_class_thresholded_inference_standard(model, score_thresholds):
     """
     Args:
         model (nn.Module): Detectron2 model.
         score_threshold (List[float]): Threshold for each class.
-        topk_per_cat (List[int])
     """
 
     def _inference(self, predictions, proposals):
@@ -474,12 +473,11 @@ def _per_class_thresholded_inference_standard(model, score_thresholds, topk_per_
 
 
 @contextmanager
-def _per_class_thresholded_inference_cascade(model, score_thresholds, topk_per_cat):
+def _per_class_thresholded_inference_cascade(model, score_thresholds):
     """
     Args:
         model (nn.Module): Detectron2 model.
         score_threshold (List[float]): Threshold for each class.
-        topk_per_cat (List[int])
     """
 
     def _forward_box(self, features, proposals, targets=None, extra_info=None):
@@ -551,12 +549,12 @@ def _per_class_thresholded_inference_cascade(model, score_thresholds, topk_per_c
 
 
 @contextmanager
-def per_class_thresholded_inference(model, score_thresholds, topk_per_cat):
+def per_class_thresholded_inference(model, score_thresholds):
     if isinstance(model.roi_heads, CascadeROIHeads):
         fn = _per_class_thresholded_inference_cascade
     else:
         fn = _per_class_thresholded_inference_standard
-    with fn(model, score_thresholds, topk_per_cat):
+    with fn(model, score_thresholds):
         yield
 
 
@@ -746,7 +744,7 @@ def inference_on_dataset(
             if idx % 1000 == 0:  # Save thresholds for later runs
                 torch.save(thresholds, init_threshold_path)
 
-            with per_class_thresholded_inference(model, thresholds, topk):
+            with per_class_thresholded_inference(model, thresholds):
                 with _turn_off_roi_heads(model, ["mask_on", "keypoint_on"]):
                     outputs = model.inference(inputs, do_postprocess=False)
             update_scores(global_scores, inputs, outputs)
@@ -782,7 +780,7 @@ def inference_on_dataset(
 
             start_compute_time = time.perf_counter()
             thresholds = get_thresholds(scores, init_thresholds)
-            with per_class_thresholded_inference(model, thresholds, topk):
+            with per_class_thresholded_inference(model, thresholds):
                 with limit_mask_branch_proposals(model, max_proposals=300):
                     outputs = model(inputs)
             update_scores(scores, inputs, outputs)
