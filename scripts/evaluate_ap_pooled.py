@@ -56,6 +56,14 @@ def main():
                 sorted(cat_anns, key=lambda x: x["score"], reverse=True)[:topk]
             )
 
+    if args.type == "segm":
+        # When evaluating mask AP, if the results contain bbox, LVIS API will
+        # use the box area as the area of the instance, instead of the mask
+        # area.  This leads to a different definition of small/medium/large.
+        # We remove the bbox field to let mask AP use mask area.
+        for x in results:
+            x.pop("bbox", None)
+
     gt = LVIS(args.annotations_json)
     results = LVISResults(gt, results, max_dets=args.max_dets)
     lvis_eval = LVISPooledEval(gt, results, iou_type=args.type, pools=args.pools)

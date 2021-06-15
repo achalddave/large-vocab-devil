@@ -39,6 +39,15 @@ def main():
         if len(cat_anns) < topk:
             missing_dets_cats.add(cat)
         results.extend(sorted(cat_anns, key=lambda x: x["score"], reverse=True)[:topk])
+
+    if args.type == "segm":
+        # When evaluating mask AP, if the results contain bbox, LVIS API will
+        # use the box area as the area of the instance, instead of the mask
+        # area.  This leads to a different definition of small/medium/large.
+        # We remove the bbox field to let mask AP use mask area.
+        for x in results:
+            x.pop("bbox", None)
+
     if missing_dets_cats:
         logger.warning(
             f"\n===\n"
