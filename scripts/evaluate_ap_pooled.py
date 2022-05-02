@@ -18,7 +18,7 @@ def main():
     parser.add_argument("results_json", type=Path)
     parser.add_argument("output_dir", type=Path)
     parser.add_argument("--type", default="segm", choices=["segm", "bbox"])
-    parser.add_argument("--dets-per-cat", default=-1, type=int)
+    parser.add_argument("--dets-per-cat", default=10000, type=int)
     parser.add_argument("--max-dets", default=-1, type=int)
     parser.add_argument("--ious", nargs="*", type=float)
     # NOTE: We default to only using areas=all, since we don't report S/M/L APs here.
